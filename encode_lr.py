@@ -56,14 +56,19 @@ def df_to_sparse(df, Q_mat, active_features, time_windows):
 
     # Build feature rows by iterating over users
     for user_id in df["user_id"].unique():
-        df_user = df[df["user_id"] == user_id][["user_id", "item_id", "timestamp", "correct"]].copy()
+        if args.dataset =='errex':
+            df_user = df[df["user_id"] == user_id][["user_id", "item_id", "skill_id", "correct"]].copy()                    #df_user = df[df["user_id"] == user_id][["user_id", "item_id", "skill_id", "correct"]].copy()
+        else:
+
+            df_user = df[df["user_id"] == user_id][["user_id", "item_id", "timestamp", "correct"]].copy()                    #df_user = df[df["user_id"] == user_id][["user_id", "item_id", "skill_id", "correct"]].copy()
+    
         df_user = df_user.values
         num_items_user = df_user.shape[0]
-
+       
         skills = Q_mat[df_user[:, 1].astype(int)].copy()
 
-        features['df'] = np.vstack((features['df'], df_user))
 
+        features['df'] = np.vstack((features['df'], df_user))
         item_ids = df_user[:, 1].reshape(-1, 1)
         labels = df_user[:, 3].reshape(-1, 1)
 
@@ -93,9 +98,11 @@ def df_to_sparse(df, Q_mat, active_features, time_windows):
 
             else:
                 attempts = np.zeros((num_items_user, num_skills + 2))
-
+       
+                
                 # Past attempts for relevant skills
                 tmp = np.vstack((np.zeros(num_skills), skills))[:-1]
+
                 attempts[:, :num_skills] = phi(np.cumsum(tmp, 0) * skills)
 
                 # Past attempts for item
@@ -137,12 +144,17 @@ def df_to_sparse(df, Q_mat, active_features, time_windows):
                 wins = np.zeros((num_items_user, num_skills + 2))
 
                 # Past wins for relevant skills
-                tmp = np.vstack((np.zeros(num_skills), skills))[:-1]
+
                 corrects = np.hstack((np.array(0), df_user[:, 3])).reshape(-1, 1)[:-1]
+                
+                tmp = np.vstack((np.zeros(num_skills), skills))[:-1]
                 wins[:, :num_skills] = phi(np.cumsum(tmp * corrects, 0) * skills)
 
                 # Past wins for item
+
+
                 onehot = OneHotEncoder(n_values=df_user[:, 1].max() + 1)
+                
                 item_ids_onehot = onehot.fit_transform(item_ids).toarray()
                 tmp = np.vstack((np.zeros(item_ids_onehot.shape[1]), np.cumsum(item_ids_onehot * labels, 0)))[:-1]
                 wins[:, -2] = phi(tmp[np.arange(num_items_user), df_user[:, 1]])
@@ -185,5 +197,6 @@ if __name__ == "__main__":
 
     df = pd.read_csv(os.path.join(data_path, 'preprocessed_data.csv'), sep="\t")
     qmat = sparse.load_npz(os.path.join(data_path, 'q_mat.npz')).toarray()
+    
     features = df_to_sparse(df, qmat, active_features, args.time_windows)
     sparse.save_npz(os.path.join(data_path, f"X-lr-{features_suffix}"), features)
