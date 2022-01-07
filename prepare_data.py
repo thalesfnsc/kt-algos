@@ -4,6 +4,8 @@ from scipy import sparse
 import argparse
 import os
 
+#from train_lr import Q_mat
+
 
 def prepare_assistments(data_name, min_interactions_per_user, remove_nan_skills):
     """Preprocess ASSISTments dataset.
@@ -101,8 +103,10 @@ def prepare_kddcup10(data_name, min_interactions_per_user, kc_col_name, remove_n
     """
     data_path = os.path.join("data", data_name)
     df = pd.read_csv(os.path.join(data_path, "data.txt"), delimiter='\t')
+    #df = pd.read_csv(os.path.join(data_path, "data.csv"))
     df = df.rename(columns={'Anon Student Id': 'user_id',
                             'Correct First Attempt': 'correct'})
+
 
     # Create item from problem and step
     df["item_id"] = df["Problem Name"] + ":" + df["Step Name"]
@@ -116,6 +120,7 @@ def prepare_kddcup10(data_name, min_interactions_per_user, kc_col_name, remove_n
     # Filter too short sequences
     df = df.groupby("user_id").filter(lambda x: len(x) >= min_interactions_per_user)
 
+    print(df.head())
     # Remove continuous outcomes
     df = df[df["correct"].isin([0, 1])]
 
@@ -140,19 +145,24 @@ def prepare_kddcup10(data_name, min_interactions_per_user, kc_col_name, remove_n
     df["item_id"] = np.unique(df["item_id"], return_inverse=True)[1]
 
     # Build Q-matrix
-    Q_mat = np.zeros((len(df["item_id"].unique()), len(kc_set)))
+    Q_mat = np.zeros((len(df["item_id"].unique()),len(kc_set)))
     for item_id, kc_str in df[["item_id", kc_col_name]].values:
         for kc in kc_str.split('~~'):
             Q_mat[item_id, kc2idx[kc]] = 1
+
 
     df = df[['user_id', 'item_id', 'timestamp', 'correct']]
     df['correct'] = df['correct'].astype(np.int32)
     df.reset_index(inplace=True, drop=True)
 
     # Save data
+
+    #sparse.save_npz("/home/thales/kt-algos/data/algebra_2005_2006/q_mat.npz", sparse.csr_matrix(Q_mat))
+    #df.to_csv( '/home/thales/kt-algos/data/algebra_2005_2006/preprocessed_data.csv', sep="\t", index=False)
+   
     sparse.save_npz(os.path.join(data_path, "q_mat.npz"), sparse.csr_matrix(Q_mat))
     df.to_csv(os.path.join(data_path, "preprocessed_data.csv"), sep="\t", index=False)
-
+    
 
 def prepare_squirrel_ai(min_interactions_per_user):
     """Preprocess Squirrel AI dataset.
@@ -240,8 +250,10 @@ def prepare_lalilo(min_interactions_per_user):
     df["item_id"] = np.unique(df["item_id"], return_inverse=True)[1]
     df["skill_id"] = np.unique(df["skill_id"], return_inverse=True)[1]
 
+
+
     # Build Q-matrix
-    Q_mat = np.zeros((len(df["item_id"].unique()), len(df["skill_id"].unique())))
+    Q_mat = np.zeros((len(df["item_id"].unique()), len(df["skill_id"].unique() )))
     for item_id, skill_id in df[["item_id", "skill_id"]].values:
         Q_mat[item_id, skill_id] = 1
 
@@ -252,6 +264,45 @@ def prepare_lalilo(min_interactions_per_user):
     # Save data
     sparse.save_npz(os.path.join(data_path, "q_mat.npz"), sparse.csr_matrix(Q_mat))
     df.to_csv(os.path.join(data_path, "preprocessed_data.csv"), sep="\t", index=False)
+
+
+def prepare_errex():
+    data_path = "data/errex/"
+
+    df = pd.read_csv(os.path.join(data_path,'errex data subproblems.csv'))
+    kc_list = df['skill_name'].unique()
+    
+
+    #Preprocess Ids
+    unique_problem_id = df['problem_id'].unique()
+    id_set = set(unique_problem_id)
+    id2idx = {id: i for i, id in enumerate(id_set)}
+
+
+    #Extract KCs
+    kc_set = set(kc_list)
+    kc2idx = {kc: i for i, kc in enumerate(kc_set)}
+    df['problem_id'] = df['problem_id'].apply(lambda x: id2idx[x])
+    
+
+    #Build Q-matrix
+    Q_mat = np.zeros((len(df["problem_id"].unique()), len(df["skill_name"].unique())))
+    print(Q_mat.shape)
+    for problem_id, skill_name in df[["problem_id", "skill_name"]].values:
+        Q_mat[problem_id, kc2idx[skill_name]] = 1
+    
+    
+    #Final pre process
+    df = df.rename(columns={"student_id": "user_id",
+                                            "problem_id": "item_id",
+                                            "skill_name": "skill_id"})
+
+    df.drop("condition",axis='columns',inplace=True)
+    
+    #Save data
+    df.to_csv(os.path.join(data_path, "preprocessed_data.csv"), sep="\t", index=False)
+    sparse.save_npz(os.path.join(data_path,"q_mat.npz"), sparse.csr_matrix(Q_mat))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Prepare datasets.')
@@ -282,3 +333,7 @@ if __name__ == "__main__":
             min_interactions_per_user=args.min_interactions)
     elif args.dataset == "lalilo":
         prepare_lalilo(min_interactions_per_user=args.min_interactions)
+    ####
+    elif args.dataset == "errex":
+        prepare_errex()
+        
